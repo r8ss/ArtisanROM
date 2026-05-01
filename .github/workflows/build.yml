@@ -103,6 +103,11 @@ jobs:
           swap-size-gb: 12
           remove-existing-swap-files: true
 
+      - name: Build ROM
+        run: |
+          source ./buildenv.sh ${{ matrix.target }}
+          ./scripts/make_rom.sh --force
+
       - name: Upload to GoFile
         run: |
           ZIP_FILE=$(find out -maxdepth 1 -type f -name "*.zip" | head -n 1)
