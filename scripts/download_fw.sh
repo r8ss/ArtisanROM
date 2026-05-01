@@ -7,14 +7,6 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
 
 # [
 source "$SRC_DIR/scripts/utils/firmware_utils.sh" || exit 1
@@ -98,11 +90,10 @@ VERIFY_ODIN_PACKAGES()
 
         FILE_NAME="${FILE_NAME%.md5}"
 
-        # Samsung stores the output of `md5sum` at the very end of the file
-        LENGTH="32" # Length of MD5 hash
-        LENGTH="$((LENGTH + 2))" # 2 whitespace chars
-        LENGTH="$((LENGTH + ${#FILE_NAME}))" # File name without .md5 extension
-        LENGTH="$((LENGTH + 1))" # 1 newline char
+        LENGTH="32" 
+        LENGTH="$((LENGTH + 2))" 
+        LENGTH="$((LENGTH + ${#FILE_NAME}))" 
+        LENGTH="$((LENGTH + 1))" 
 
         STORED_HASH="$(tail -c "$LENGTH" "$f" | cut -d " " -f 1 -s)"
         if [ ! "$STORED_HASH" ] || [[ "${#STORED_HASH}" != "32" ]]; then
@@ -130,7 +121,6 @@ for i in "${FIRMWARES[@]}"; do
     LATEST_FIRMWARE="$(GET_LATEST_FIRMWARE "$MODEL" "$CSC")"
     if [ ! "$LATEST_FIRMWARE" ]; then
         LOGW "Latest available firmware could not be fetched"
-        #exit 1
     fi
 
     LOG_STEP_IN "- Processing $MODEL firmware with $CSC CSC"
@@ -141,7 +131,6 @@ for i in "${FIRMWARES[@]}"; do
     LOG_STEP_IN
 
     if ! $FORCE; then
-        # Skip if firmware has been extracted and equal/newer than the one in FUS
         if [ -f "$FW_DIR/${MODEL}_${CSC}/.extracted" ]; then
             if COMPARE_SEC_BUILD_VERSION "$(cat "$FW_DIR/${MODEL}_${CSC}/.extracted")" "$LATEST_FIRMWARE"; then
                 LOG "\033[0;33m! This firmware has already been extracted, skipping\033[0m"
@@ -150,10 +139,9 @@ for i in "${FIRMWARES[@]}"; do
             fi
         fi
 
-        # Skip if firmware has already been downloaded
         if [ -f "$ODIN_DIR/${MODEL}_${CSC}/.downloaded" ]; then
             if ! COMPARE_SEC_BUILD_VERSION "$(cat "$ODIN_DIR/${MODEL}_${CSC}/.downloaded")" "$LATEST_FIRMWARE"; then
-                LOG "\033[0;33m! A newer firmware is available for download, use --force flag if you want to overwrite it\033[0m"
+                LOG "\033[0;33m! A newer firmware is available for download, use --force flag\033[0m"
             else
                 LOG "\033[0;33m! This firmware has already been downloaded\033[0m"
             fi
@@ -163,25 +151,25 @@ for i in "${FIRMWARES[@]}"; do
     fi
 
     LOG "- Downloading firmware..."
-    [ -f "$ODIN_DIR/${MODEL}_${CSC}/.downloaded" ] && rm -rf "$ODIN_DIR/${MODEL}_${CSC}"
+    [ -d "$ODIN_DIR/${MODEL}_${CSC}" ] && rm -rf "$ODIN_DIR/${MODEL}_${CSC}"
     mkdir -p "$ODIN_DIR/${MODEL}_${CSC}"
 
     COUNT=1
-    # Loop infinetely until download succeeds
     while true; do
-        # shellcheck disable=SC2164
-        # Anan's samloader stores its logs in the current working directory, let's move into OUT_DIR just for this time
         (
         cd "$OUT_DIR"
-        STR=""
-        [ $MODEL == "SM-S731B" ] && STR=" -v  S731BXXS6AZCH/S731BOWO6AZCH/S731BXXS6AZCI/S731BXXS6AZCH"
-        samloader -m "$MODEL" -r "$CSC" -i "$IMEI" -s "$SERIAL_NO" download$STR -O "$ODIN_DIR/${MODEL}_${CSC}" || exit 1
+        # Alteração: Removido hardcode da versão. Samloader detecta AZCH automaticamente.
+        # Adicionado fallback: tenta com IMEI/Serial, se falhar tenta modo genérico.
+        if ! samloader -m "$MODEL" -r "$CSC" -i "$IMEI" -s "$SERIAL_NO" download -O "$ODIN_DIR/${MODEL}_${CSC}"; then
+            LOGW "Falha com identificador, tentando download genérico..."
+            samloader -m "$MODEL" -r "$CSC" download -O "$ODIN_DIR/${MODEL}_${CSC}" || exit 1
+        fi
         )
 
         ZIP_FILE="$(find "$ODIN_DIR/${MODEL}_${CSC}" -name "*.zip" | sort -r | head -n 1)"
         if [ ! "$ZIP_FILE" ] || [ ! -f "$ZIP_FILE" ]; then
             if [ $COUNT -gt 10 ]; then
-                LOGW "\033[0;31m! Download failed, check your network connection or device IMEI!\033[0m"
+                LOGW "\033[0;31m! Download failed, check your network or device info!\033[0m"
                 exit 1
             fi
 
@@ -194,7 +182,7 @@ for i in "${FIRMWARES[@]}"; do
     done
 
     LOG "- Extracting $(basename "$ZIP_FILE")..."
-    EVAL "unzip -o \"$ZIP_FILE\" -d \"$ODIN_DIR/${MODEL}_${CSC}\" && rm -rf \"$ZIP_FILE\"" || exit 1
+    unzip -o "$ZIP_FILE" -d "$ODIN_DIR/${MODEL}_${CSC}" && rm -rf "$ZIP_FILE" || exit 1
 
     VERIFY_ODIN_PACKAGES
 
